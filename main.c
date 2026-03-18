@@ -40,11 +40,12 @@ int main(void)
 		on(ButtonPress,
 			if (e.xbutton.subwindow != None) { 
 				XRaiseWindow(d, e.xbutton.subwindow);
+				XSetInputFocus(d, e.xbutton.subwindow, RevertToParent, CurrentTime);
 				XGetWindowAttributes(d, e.xbutton.subwindow, &attr);
-				if (!attr.override_redirect) {
+				if (!attr.override_redirect) 
 					start = e.xbutton;
-				}
 			}
+			XAllowEvents(d, ReplayPointer, CurrentTime);
 		)
 		on(MotionNotify,
 			if (start.subwindow != None) {
