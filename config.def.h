@@ -6,7 +6,7 @@
 #define MODMASK Mod4Mask
 
 #define BORDER_SIZE 2
-#define BORDER_COLOR 0x222232
+#define BORDER_COLOR 0x333333
 
 #define WORKSPACES 4 
 

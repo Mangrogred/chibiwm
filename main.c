@@ -41,7 +41,9 @@ int main(void)
 			if (e.xbutton.subwindow != None) { 
 				XRaiseWindow(d, e.xbutton.subwindow);
 				XGetWindowAttributes(d, e.xbutton.subwindow, &attr);
-				start = e.xbutton;
+				if (!attr.override_redirect) {
+					start = e.xbutton;
+				}
 			}
 		)
 		on(MotionNotify,
@@ -56,16 +58,19 @@ int main(void)
 			}
 		)
         on(MapRequest, 
-				bool found = false;
-				for (int w = 0; w < WORKSPACES; w++)
-					for (int i = 0; i < ws_count[w]; i++)
-						if (ws[w][i] == e.xmaprequest.window) found = true;
-				if (!found)
-					ws[current_ws][ws_count[current_ws]++] = e.xmaprequest.window;
+				XGetWindowAttributes(d, e.xmaprequest.window, &attr);
+				if (!attr.override_redirect) {
+					bool found = false;
+					for (int w = 0; w < WORKSPACES; w++)
+						for (int i = 0; i < ws_count[w]; i++)
+							if (ws[w][i] == e.xmaprequest.window) found = true;
+					if (!found)
+						ws[current_ws][ws_count[current_ws]++] = e.xmaprequest.window;
+					XSelectInput(d, e.xmaprequest.window, EnterWindowMask);
+					XSetWindowBorderWidth(d, e.xmaprequest.window, BORDER_SIZE);
+					XSetWindowBorder(d, e.xmaprequest.window, BORDER_COLOR);
+				}
 				XMapWindow(d, e.xmaprequest.window);
-				XSelectInput(d, e.xmaprequest.window, EnterWindowMask);
-				XSetWindowBorderWidth(d, e.xmaprequest.window, BORDER_SIZE);
-				XSetWindowBorder(d, e.xmaprequest.window, BORDER_COLOR);
 		)
 		on(UnmapNotify,
 			if (e.xunmap.send_event) {
@@ -111,10 +116,9 @@ void move_to_ws(Display *d, Window win, int new_ws) {
 
 
 /* TODO:
- * 1. fix feh -b not being ignored by wm
- * 2. add spawn function and maybe more like in dwm
- * 3. add tiling
- * 4. add status bar
- * 5. add logs to xerror
- * 6. cheese
+ * 1. add spawn function and maybe more like in dwm
+ * 2. add tiling
+ * 3. add status bar
+ * 4. add logs to xerror
+ * 5. cheese
 */
