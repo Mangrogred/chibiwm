@@ -2,6 +2,8 @@
 Small X11 Window Manager
 
 ## Files
+`config.def.h` - default config, if no config.h provided, auto-generates config.h by just copying config.def.h
+
 `config.h` - config so you can change some settings without changing source code
 
 `main.c` - source code of chibi wm 
