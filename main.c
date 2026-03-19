@@ -7,8 +7,10 @@
 */
 
 #include <X11/Xlib.h>
+#include <X11/Xft/Xft.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "config.h"
 
@@ -28,6 +30,10 @@ XButtonEvent start;
 XEvent e;
 Window r;
 Window focused = None;
+Window bar;
+GC gc;
+XftFont *font;
+XftDraw *xdraw;
 
 int xerror(Display *d, XErrorEvent *e);
 void configurerequest(XEvent *e);
@@ -36,6 +42,8 @@ void motionnotify(XEvent *e);
 void maprequest(XEvent *e);
 void unmapnotify(XEvent *e);
 
+void create_bar(void);
+void draw_bar(void);
 void setfocus(Window w);
 void switch_ws(Display *d, int new_ws);
 void move_to_ws(Display *d, Window win, int new_ws);
@@ -50,6 +58,8 @@ int main(void)
 	XGrabButton(d, 3, MODMASK, r, 0, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
 	XGrabButton(d, 1, 0, r, 0, ButtonPressMask, GrabModeSync, GrabModeSync, None, None);
 	XSetErrorHandler(xerror); 
+	create_bar();
+	draw_bar();
 
 	while (running && !XNextEvent (d, &e)) {
 		on(ConfigureRequest,	configurerequest(&e))
@@ -66,7 +76,7 @@ int main(void)
 
 void configurerequest(XEvent *e) {
 	XConfigureRequestEvent *ev = &e->xconfigurerequest;
-	XMoveResizeWindow(d, ev->window, 0, 0, ev->width, ev->height); // TODO: ADD TILING
+	XMoveResizeWindow(d, ev->window, 0, BAR_SIZE, ev->width, ev->height); // TODO: ADD TILING
 }
 
 void buttonpress(XEvent *e) {
@@ -133,6 +143,37 @@ int xerror(Display *d, XErrorEvent *e) {
 	return 0; 
 }
 
+void create_bar(void) {
+	bar = XCreateSimpleWindow(d, r, 0, 0, DisplayWidth(d, 0), BAR_SIZE, 0, 0, BAR_BACKGROUND_COLOR);
+
+	XSetWindowAttributes wa;
+	wa.override_redirect = True;
+
+	XChangeWindowAttributes(d, bar, CWOverrideRedirect, &wa);
+	XSelectInput(d, bar, ExposureMask);
+	XMapWindow(d, bar);
+	XSetWindowBorderWidth(d, bar, 0);
+
+	gc = XCreateGC(d, bar, 0, NULL);
+	font = XftFontOpenName(d, DefaultScreen(d), BAR_FONT);
+	xdraw = XftDrawCreate(d, bar, DefaultVisual(d, 0), DefaultColormap(d, 0));
+}
+
+void draw_bar(void) {
+	XSetForeground(d, gc, BAR_BACKGROUND_COLOR);
+	XFillRectangle(d, bar, gc, 0, 0, DisplayWidth(d, 0), BAR_SIZE);
+
+	XftColor col;
+	for (int i = 0; i < WORKSPACES; i++) {
+		XftColorAllocName(d, DefaultVisual(d, 0), DefaultColormap(d, 0),
+			i == current_ws ? BAR_ACTIVE_WS_COLOR : BAR_INACTIVE_WS_COLOR, &col);
+		char label[2];
+		snprintf(label, sizeof(label), "%d", i + 1);
+		XftDrawStringUtf8(xdraw, &col, font, 8 + i * (BAR_FONT_SIZE * 2), (BAR_SIZE / 2) + (BAR_FONT_SIZE / 2), (FcChar8*)label, 1);
+		XftColorFree(d, DefaultVisual(d, 0), DefaultColormap(d, 0), &col);
+	}
+}
+
 void setfocus(Window w) {
 	if (w == None || w == r) return;
 	if (focused != None && focused != w)
@@ -148,6 +189,7 @@ void switch_ws(Display *d, int new_ws) {
 	current_ws = new_ws;
 	for (int i = 0; i < ws_count[current_ws]; i++)
 		XMapWindow(d, ws[current_ws][i]);
+	draw_bar();
 }
 
 void move_to_ws(Display *d, Window win, int new_ws) {

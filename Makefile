@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra
-LIBS = -lX11
+LIBS = -lX11 -lXft $(shell pkg-config --cflags xft freetype2)
 
 all: config.h chibiwm
 
