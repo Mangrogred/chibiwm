@@ -1,7 +1,7 @@
 # Chibi WM: A small window manager in C 
 Small X11 Window Manager
 
-![Screenshot preview](preview.png?)
+![Screenshot preview](screenshot.png)
 
 ## Files
 `config.def.h` - default config, if no config.h provided, auto-generates config.h by just copying config.def.h
