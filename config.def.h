@@ -1,3 +1,4 @@
+
 // Mod1Mask - Alt
 // Mod2Mask - Numlock
 // Mod3Mask - Shift
@@ -14,8 +15,9 @@
 #define BAR_FONT "monospace:size=12"
 #define BAR_FONT_SIZE 12 // should be the same as in the BAR_FONT
 #define BAR_ACTIVE_WS_COLOR "#0077ff"
-#define BAR_INACTIVE_WS_COLOR "#dddddd"
+#define BAR_INACTIVE_WS_COLOR "#bbbbbb"
 
+#define BAR_LAYOUT_COLOR "#dddddd"
 #define BAR_STATUS_COLOR "#dddddd"
 
 #define WORKSPACES 6 
@@ -23,8 +25,11 @@
 //example:			x("button", MaskForAdditionalButton or 0,		function in c)
 #define TBL(x)  	x("q", 0, 			XKillClient(d, e.xkey.subwindow))	\
 					x("q", ShiftMask, 	running = false)					\
-					x("e", 0, 			system("alacritty &"))				\
-					x("d", 0, 			system("rofi -show run &")) 		\
+                	x("e", 0, 			system("alacritty &"))				\
+                	x("d", 0, 			system("rofi -show run &")) 		\
+                	x("t", 0, 			toggle_layout(tiling))				\
+                	x("s", 0, 			toggle_layout(floating))			\
+                	x("f", 0, 			toggle_layout(fullscreen))	 		\
 					x("1", 0, 			switch_ws(d, 0))					\
 					x("2", 0, 			switch_ws(d, 1))					\
 					x("3", 0, 			switch_ws(d, 2))					\
