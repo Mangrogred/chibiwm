@@ -31,9 +31,9 @@ XEvent e;
 Window r;
 Window focused = None;
 Window bar;
+Pixmap bar_buf;
 GC gc;
 XftFont *font;
-XftDraw *xdraw;
 
 int xerror(Display *d, XErrorEvent *e);
 void configurerequest(XEvent *e);
@@ -154,14 +154,16 @@ void create_bar(void) {
 	XMapWindow(d, bar);
 	XSetWindowBorderWidth(d, bar, 0);
 
+	bar_buf = XCreatePixmap(d, r, DisplayWidth(d, 0), BAR_SIZE, DefaultDepth(d, 0));
 	gc = XCreateGC(d, bar, 0, NULL);
 	font = XftFontOpenName(d, DefaultScreen(d), BAR_FONT);
-	xdraw = XftDrawCreate(d, bar, DefaultVisual(d, 0), DefaultColormap(d, 0));
 }
 
 void draw_bar(void) {
 	XSetForeground(d, gc, BAR_BACKGROUND_COLOR);
-	XFillRectangle(d, bar, gc, 0, 0, DisplayWidth(d, 0), BAR_SIZE);
+	XFillRectangle(d, bar_buf, gc, 0, 0, DisplayWidth(d, 0), BAR_SIZE);
+
+	XftDraw *xdraw = XftDrawCreate(d, bar_buf, DefaultVisual(d, 0), DefaultColormap(d, 0));
 
 	XftColor col;
 	for (int i = 0; i < WORKSPACES; i++) {
@@ -172,6 +174,9 @@ void draw_bar(void) {
 		XftDrawStringUtf8(xdraw, &col, font, 8 + i * (BAR_FONT_SIZE * 2), (BAR_SIZE / 2) + (BAR_FONT_SIZE / 2), (FcChar8*)label, 1);
 		XftColorFree(d, DefaultVisual(d, 0), DefaultColormap(d, 0), &col);
 	}
+
+	XCopyArea(d, bar_buf, bar, gc, 0, 0, DisplayWidth(d, 0), BAR_SIZE, 0, 0);
+	XFlush(d);
 }
 
 void setfocus(Window w) {
@@ -184,12 +189,14 @@ void setfocus(Window w) {
 }
 
 void switch_ws(Display *d, int new_ws) {
+	if (new_ws == current_ws) return;
 	for (int i = 0; i < ws_count[current_ws]; i++)
 		XUnmapWindow(d, ws[current_ws][i]);
 	current_ws = new_ws;
 	for (int i = 0; i < ws_count[current_ws]; i++)
 		XMapWindow(d, ws[current_ws][i]);
 	draw_bar();
+	focused = None;
 }
 
 void move_to_ws(Display *d, Window win, int new_ws) {
@@ -202,6 +209,7 @@ void move_to_ws(Display *d, Window win, int new_ws) {
 	}
 	ws[new_ws][ws_count[new_ws]++] = win;
 	XUnmapWindow(d, win);
+	focused = None;
 }
 
 
