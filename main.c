@@ -16,7 +16,6 @@
 #define stk(s)			XKeysymToKeycode(d, XStringToKeysym(s))
 #define on(ev, x)		if (e.type == ev) { x; } 
 #define keys(k, mod, _)	XGrabKey(d, stk(k), MODMASK | mod, r, 1, 1, 1);
-#define button(b, mod)  XGrabButton(d, b, mod, r, 0, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
 #define map(k, mod, x)	if (e.xkey.keycode == stk(k) && (e.xkey.state & ~Mod2Mask) == (MODMASK | mod)) { x; }
 
 bool running = true;
@@ -47,8 +46,9 @@ int main(void)
 	r = DefaultRootWindow(d); 
 	XSelectInput(d, r, SubstructureRedirectMask | SubstructureNotifyMask | EnterWindowMask);
 	TBL(keys);
-	button(AnyButton, MODMASK);
-	button(1, 0);
+	XGrabButton(d, 1, MODMASK, r, 0, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
+	XGrabButton(d, 3, MODMASK, r, 0, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
+	XGrabButton(d, 1, 0, r, 0, ButtonPressMask, GrabModeSync, GrabModeSync, None, None);
 	XSetErrorHandler(xerror); 
 
 	while (running && !XNextEvent (d, &e)) {
@@ -66,18 +66,20 @@ int main(void)
 
 void configurerequest(XEvent *e) {
 	XConfigureRequestEvent *ev = &e->xconfigurerequest;
-	XMoveResizeWindow(d, ev->window, 0, 0, ev->width, ev->height);
+	XMoveResizeWindow(d, ev->window, 0, 0, ev->width, ev->height); // TODO: ADD TILING
 }
 
 void buttonpress(XEvent *e) {
 	XButtonPressedEvent *ev = &e->xbutton;
-	setfocus(ev->subwindow);
-	if (ev->subwindow != None && ev->state & MODMASK) { 
+	if (ev->subwindow != None) {
+		setfocus(ev->subwindow);
 		XRaiseWindow(d, ev->subwindow);
-		XSetInputFocus(d, ev->subwindow, RevertToParent, CurrentTime);
-		XGetWindowAttributes(d, ev->subwindow, &attr);
-		if (!attr.override_redirect) 
-			start = *ev;
+		if (ev->subwindow != None && ev->state & MODMASK) { 
+			XSetInputFocus(d, ev->subwindow, RevertToParent, CurrentTime);
+			XGetWindowAttributes(d, ev->subwindow, &attr);
+			if (!attr.override_redirect) 
+				start = *ev;
+		}
 	}
 	XAllowEvents(d, ReplayPointer, CurrentTime);
 }
