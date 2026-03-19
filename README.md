@@ -21,7 +21,7 @@ This code has parts of code from:
 Thanks to everyone
 
 ## Compilation
-You need only X11lib and any c compiler
+You need only X11lib, X11ft, freetype and any c compiler
 
 Build: `make`
 
