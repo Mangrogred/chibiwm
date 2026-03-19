@@ -22,6 +22,16 @@
 #define keys(k, mod, _)	XGrabKey(d, stk(k), MODMASK | mod, r, 1, 1, 1);
 #define map(k, mod, x)	if (e.xkey.keycode == stk(k) && (e.xkey.state & ~Mod2Mask) == (MODMASK | mod)) { x; }
 
+typedef enum {
+	floating = 0,
+	fullscreen = 1
+} Layout;
+
+typedef struct {
+    Window win;
+    int x, y, w, h;
+} WinGeom;
+
 bool running = true;
 Window ws[WORKSPACES][256];
 int ws_count[WORKSPACES] = {0};
@@ -36,6 +46,8 @@ Window bar;
 Pixmap bar_buf;
 GC gc;
 XftFont *font;
+Layout ws_layout[WORKSPACES] = {0};
+WinGeom ws_geom[WORKSPACES][256];
 
 int xerror(Display *d, XErrorEvent *e);
 void configurerequest(XEvent *e);
@@ -44,6 +56,11 @@ void motionnotify(XEvent *e);
 void propertynotify(XEvent *e);
 void maprequest(XEvent *e);
 void unmapnotify(XEvent *e);
+
+void layout_floating(Window w);
+void layout_fullscreen(Window w);
+void apply_layout(void);
+void toggle_layout(Layout mode);
 
 void create_bar(void);
 void draw_bar(void);
@@ -80,12 +97,16 @@ int main(void)
 
 void configurerequest(XEvent *e) {
 	XConfigureRequestEvent *ev = &e->xconfigurerequest;
-	XMoveResizeWindow(d, ev->window, 0, BAR_SIZE, ev->width, ev->height); // TODO: ADD TILING
+	if (ws_layout[current_ws] == floating) {
+		XMoveResizeWindow(d, ev->window, 0, BAR_SIZE, ev->width, ev->height);
+	} else if (ws_layout[current_ws] == fullscreen) {
+		layout_fullscreen(ev->window);
+	}
 }
 
 void buttonpress(XEvent *e) {
 	XButtonPressedEvent *ev = &e->xbutton;
-	if (ev->subwindow != None) {
+	if (ev->subwindow != None && ws_layout[current_ws] != fullscreen) {
 		setfocus(ev->subwindow);
 		XRaiseWindow(d, ev->subwindow);
 		if (ev->subwindow != None && ev->state & MODMASK) { 
@@ -100,7 +121,7 @@ void buttonpress(XEvent *e) {
 
 void motionnotify(XEvent *e) {
 	XButtonPressedEvent *ev = &e->xbutton;
-	if (start.subwindow != None) {
+	if (start.subwindow != None && ws_layout[current_ws] != fullscreen) {
 		int xdiff = ev->x_root - start.x_root;
 		int ydiff = ev->y_root - start.y_root;
 		XMoveResizeWindow(d, start.subwindow,
@@ -125,13 +146,18 @@ void maprequest(XEvent *e) {
 		for (int w = 0; w < WORKSPACES; w++)
 			for (int i = 0; i < ws_count[w]; i++)
 				if (ws[w][i] == ev->window) found = true;
-		if (!found)
-			ws[current_ws][ws_count[current_ws]++] = ev->window;
+		if (!found) {
+			ws[current_ws][ws_count[current_ws]] = ev->window;
+			ws_geom[current_ws][ws_count[current_ws]] = (WinGeom){ev->window, attr.x, BAR_SIZE, attr.width, attr.height};
+			ws_count[current_ws]++;
+		}
 		XSelectInput(d, ev->window, EnterWindowMask);
 		XSetWindowBorderWidth(d, ev->window, BORDER_SIZE);
 		XSetWindowBorder(d, ev->window, BORDER_INACTIVE_COLOR);
 	}
 	XMapWindow(d, ev->window);
+	if (ws_layout[current_ws] == fullscreen)
+		layout_fullscreen(ev->window);
 	setfocus(ev->window);
 }
 
@@ -141,12 +167,43 @@ void unmapnotify(XEvent *e) {
 		for (int w = 0; w < WORKSPACES; w++) {
 			for (int i = 0; i < ws_count[w]; i++) {
 				if (ws[w][i] == ev->window) {
-					ws[w][i] = ws[w][--ws_count[w]];
+					ws_count[w]--;
+					ws[w][i] = ws[w][ws_count[w]];
+					ws_geom[w][i] = ws_geom[w][ws_count[w]];
 					break;
 				}
 			}
 		}
 	}
+}
+
+void layout_fullscreen(Window w) {
+	XMoveResizeWindow(d, w, 0, BAR_SIZE, DisplayWidth(d, 0), DisplayHeight(d, 0) - BAR_SIZE);
+	XSetWindowBorderWidth(d, w, 0);
+}
+
+void apply_layout(void) {
+	for (int i = 0; i < ws_count[current_ws]; i++) {
+		Window w = ws[current_ws][i];
+		if (ws_layout[current_ws] == fullscreen) {
+			if (ws_geom[current_ws][i].w == 0) {
+				XGetWindowAttributes(d, w, &attr);
+				ws_geom[current_ws][i] = (WinGeom){w, attr.x, attr.y, attr.width, attr.height};
+			}
+			layout_fullscreen(w);
+		} if (ws_layout[current_ws] == floating) {
+			XMoveResizeWindow(d, w, ws_geom[current_ws][i].x, ws_geom[current_ws][i].y, ws_geom[current_ws][i].w, ws_geom[current_ws][i].h);
+			XSetWindowBorderWidth(d, ws[current_ws][i], BORDER_SIZE);
+			ws_geom[current_ws][i].w = 0;
+		}
+	}
+	draw_bar();
+}
+
+void toggle_layout(Layout mode) {
+	if (mode == ws_layout[current_ws]) return;
+	ws_layout[current_ws] = mode;
+	apply_layout();
 }
 
 int xerror(Display *d, XErrorEvent *e) {
@@ -184,6 +241,16 @@ void draw_bar(void) {
 		XftDrawStringUtf8(xdraw, &col, font, 8 + i * (BAR_FONT_SIZE * 2), (BAR_SIZE / 2) + (BAR_FONT_SIZE / 2), (FcChar8*)label, 1);
 		XftColorFree(d, DefaultVisual(d, 0), DefaultColormap(d, 0), &col);
 	}
+	const char *mode_label;
+	switch (ws_layout[current_ws]) {
+		case fullscreen:	mode_label = "[F]"; break;
+		case floating:		mode_label = "[~]"; break;
+		default:			mode_label = "[?]"; break;
+	}
+	int ws_end = 8 + WORKSPACES * (BAR_FONT_SIZE * 2);
+	XftColorAllocName(d, DefaultVisual(d, 0), DefaultColormap(d, 0), BAR_LAYOUT_COLOR, &col);
+	XftDrawStringUtf8(xdraw, &col, font, ws_end, (BAR_SIZE / 2) + (BAR_FONT_SIZE / 2), (FcChar8*)mode_label, strlen(mode_label));
+	XftColorFree(d, DefaultVisual(d, 0), DefaultColormap(d, 0), &col);
 
 	char status[64] = {0};
 	XTextProperty name;
@@ -217,24 +284,25 @@ void switch_ws(Display *d, int new_ws) {
 	if (new_ws == current_ws) return;
 	for (int i = 0; i < ws_count[current_ws]; i++)
 		XUnmapWindow(d, ws[current_ws][i]);
+	focused = None;
 	current_ws = new_ws;
 	for (int i = 0; i < ws_count[current_ws]; i++)
 		XMapWindow(d, ws[current_ws][i]);
 	draw_bar();
-	focused = None;
 }
 
 void move_to_ws(Display *d, Window win, int new_ws) {
 	if (new_ws == current_ws || win == None) return;
 	for (int i = 0; i < ws_count[current_ws]; i++) {
 		if (ws[current_ws][i] == win) {
+			ws_geom[new_ws][ws_count[new_ws]] = ws_geom[current_ws][i];
 			ws[current_ws][i] = ws[current_ws][--ws_count[current_ws]];
+			ws_geom[current_ws][i] = ws_geom[current_ws][ws_count[current_ws]];
 			break;
 		}
 	}
 	ws[new_ws][ws_count[new_ws]++] = win;
 	XUnmapWindow(d, win);
-	focused = None;
 }
 
 
