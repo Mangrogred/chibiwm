@@ -28,6 +28,7 @@ XWindowAttributes attr;
 XButtonEvent start;
 XEvent e;
 Window r;
+Window focused = None;
 
 int xerror(Display *d, XErrorEvent *e);
 void configurerequest(XEvent *e);
@@ -36,7 +37,7 @@ void motionnotify(XEvent *e);
 void maprequest(XEvent *e);
 void unmapnotify(XEvent *e);
 
-void setfocus(Window w, bool f);
+void setfocus(Window w);
 void switch_ws(Display *d, int new_ws);
 void move_to_ws(Display *d, Window win, int new_ws);
 
@@ -44,7 +45,7 @@ int main(void)
 {
 	d = XOpenDisplay(0); 
 	r = DefaultRootWindow(d); 
-	XSelectInput(d, r, SubstructureRedirectMask | SubstructureNotifyMask | EnterWindowMask | LeaveWindowMask);
+	XSelectInput(d, r, SubstructureRedirectMask | SubstructureNotifyMask | EnterWindowMask);
 	TBL(keys);
 	button(AnyButton, MODMASK);
 	button(1, 0);
@@ -53,8 +54,7 @@ int main(void)
 	while (running && !XNextEvent (d, &e)) {
 		on(ConfigureRequest,	configurerequest(&e))
 		on(ButtonPress,			buttonpress(&e))
-		on(EnterNotify,			setfocus(e.xcrossing.window, 1))
-		on(LeaveNotify,			setfocus(e.xcrossing.window, 0))
+		on(EnterNotify,			setfocus(e.xcrossing.window))
 		on(MotionNotify,		motionnotify(&e))
         on(MapRequest,			maprequest(&e))
 		on(UnmapNotify,			unmapnotify(&e))
@@ -71,7 +71,7 @@ void configurerequest(XEvent *e) {
 
 void buttonpress(XEvent *e) {
 	XButtonPressedEvent *ev = &e->xbutton;
-	setfocus(ev->subwindow, 1);
+	setfocus(ev->subwindow);
 	if (ev->subwindow != None && ev->state & MODMASK) { 
 		XRaiseWindow(d, ev->subwindow);
 		XSetInputFocus(d, ev->subwindow, RevertToParent, CurrentTime);
@@ -105,11 +105,12 @@ void maprequest(XEvent *e) {
 				if (ws[w][i] == ev->window) found = true;
 		if (!found)
 			ws[current_ws][ws_count[current_ws]++] = ev->window;
-		XSelectInput(d, ev->window, EnterWindowMask | LeaveWindowMask);
+		XSelectInput(d, ev->window, EnterWindowMask);
 		XSetWindowBorderWidth(d, ev->window, BORDER_SIZE);
 		XSetWindowBorder(d, ev->window, BORDER_INACTIVE_COLOR);
 	}
 	XMapWindow(d, ev->window);
+	setfocus(ev->window);
 }
 
 void unmapnotify(XEvent *e) {
@@ -130,15 +131,13 @@ int xerror(Display *d, XErrorEvent *e) {
 	return 0; 
 }
 
-void setfocus(Window w, bool f) {
+void setfocus(Window w) {
 	if (w == None || w == r) return;
-	if (f) {
-		XSetInputFocus(d, w, RevertToParent, CurrentTime);
-		XSetWindowBorder(d, w, BORDER_ACTIVE_COLOR);
-	} else {
-		XSetInputFocus(d, r, RevertToPointerRoot, CurrentTime);
-		XSetWindowBorder(d, w, BORDER_INACTIVE_COLOR);
-	}
+	if (focused != None && focused != w)
+		XSetWindowBorder(d, focused, BORDER_INACTIVE_COLOR);
+	focused = w;
+	XSetInputFocus(d, focused, RevertToParent, CurrentTime);
+	XSetWindowBorder(d, focused, BORDER_ACTIVE_COLOR);
 }
 
 void switch_ws(Display *d, int new_ws) {
