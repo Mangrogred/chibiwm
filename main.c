@@ -8,9 +8,11 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
+#include <X11/Xatom.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "config.h"
 
@@ -39,6 +41,7 @@ int xerror(Display *d, XErrorEvent *e);
 void configurerequest(XEvent *e);
 void buttonpress(XEvent *e);
 void motionnotify(XEvent *e);
+void propertynotify(XEvent *e);
 void maprequest(XEvent *e);
 void unmapnotify(XEvent *e);
 
@@ -52,7 +55,7 @@ int main(void)
 {
 	d = XOpenDisplay(0); 
 	r = DefaultRootWindow(d); 
-	XSelectInput(d, r, SubstructureRedirectMask | SubstructureNotifyMask | EnterWindowMask);
+	XSelectInput(d, r, SubstructureRedirectMask | SubstructureNotifyMask | EnterWindowMask | PropertyChangeMask);
 	TBL(keys);
 	XGrabButton(d, 1, MODMASK, r, 0, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
 	XGrabButton(d, 3, MODMASK, r, 0, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
@@ -66,6 +69,7 @@ int main(void)
 		on(ButtonPress,			buttonpress(&e))
 		on(EnterNotify,			setfocus(e.xcrossing.window))
 		on(MotionNotify,		motionnotify(&e))
+		on(PropertyNotify,		propertynotify(&e))
         on(MapRequest,			maprequest(&e))
 		on(UnmapNotify,			unmapnotify(&e))
 		on(ButtonRelease,		start.subwindow = None)
@@ -105,6 +109,12 @@ void motionnotify(XEvent *e) {
 			max(1, attr.width + (start.button==3 ? xdiff : 0)),
 			max(1, attr.height + (start.button==3 ? ydiff : 0)));
 	}
+}
+
+void propertynotify(XEvent *e) {
+	XPropertyEvent *ev = &e->xproperty;
+	if ((ev->window == r) && (ev->atom == XA_WM_NAME))
+		draw_bar();
 }
 
 void maprequest(XEvent *e) {
@@ -175,6 +185,21 @@ void draw_bar(void) {
 		XftColorFree(d, DefaultVisual(d, 0), DefaultColormap(d, 0), &col);
 	}
 
+	char status[64] = {0};
+	XTextProperty name;
+	if (XGetWMName(d, r, &name) && name.value)
+		snprintf(status, sizeof(status), "%s", name.value);
+	if (!status[0])
+		strcpy(status, "chibiWM");
+
+	XGlyphInfo ext;
+	XftTextExtentsUtf8(d, font, (FcChar8*)status, strlen(status), &ext);
+	int x = DisplayWidth(d, 0) - ext.width - 8;
+	XftColorAllocName(d, DefaultVisual(d, 0), DefaultColormap(d, 0), BAR_STATUS_COLOR, &col);
+	XftDrawStringUtf8(xdraw, &col, font, x, (BAR_SIZE / 2) + (BAR_FONT_SIZE / 2), (FcChar8*)status, strlen(status));
+	XftColorFree(d, DefaultVisual(d, 0), DefaultColormap(d, 0), &col);
+
+	XftDrawDestroy(xdraw);
 	XCopyArea(d, bar_buf, bar, gc, 0, 0, DisplayWidth(d, 0), BAR_SIZE, 0, 0);
 	XFlush(d);
 }

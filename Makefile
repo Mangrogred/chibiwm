@@ -14,6 +14,6 @@ clean:
 	rm -f chibiwm
 
 install:
-	sudo cp chibiwm /usr/bin/chibiwm
+	sudo cp -f chibiwm /usr/bin/chibiwm
 
 .PHONY: all clean install

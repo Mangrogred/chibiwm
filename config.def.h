@@ -16,6 +16,8 @@
 #define BAR_ACTIVE_WS_COLOR "#0077ff"
 #define BAR_INACTIVE_WS_COLOR "#dddddd"
 
+#define BAR_STATUS_COLOR "#dddddd"
+
 #define WORKSPACES 6 
 
 //example:			x("button", MaskForAdditionalButton or 0,		function in c)
