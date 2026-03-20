@@ -30,6 +30,8 @@
                 	x("t", 0, 			toggle_layout(tiling))				\
                 	x("s", 0, 			toggle_layout(floating))			\
                 	x("f", 0, 			toggle_layout(fullscreen))	 		\
+                	x("i", 0, 			tiling_change_master_size(0.05))	\
+                	x("d", 0, 			tiling_change_master_size(-0.05))	\
 					x("1", 0, 			switch_ws(d, 0))					\
 					x("2", 0, 			switch_ws(d, 1))					\
 					x("3", 0, 			switch_ws(d, 2))					\

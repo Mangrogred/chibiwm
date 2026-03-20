@@ -49,6 +49,7 @@ XftFont *font;
 Layout ws_layout[WORKSPACES] = {0};
 WinGeom ws_geom[WORKSPACES][256];
 int unmapping = 0;
+float tiling_master_size[WORKSPACES] = {0};
 
 int xerror(Display *d, XErrorEvent *e);
 void configurerequest(XEvent *e);
@@ -58,10 +59,13 @@ void propertynotify(XEvent *e);
 void maprequest(XEvent *e);
 void unmapnotify(XEvent *e);
 
-void layout_fullscreen(Window w);
+void layout_floating(void);
+void layout_fullscreen(void);
 void layout_tiling(void);
 void apply_layout(void);
 void toggle_layout(Layout mode);
+
+void tiling_change_master_size(float size);
 
 void create_bar(void);
 void draw_bar(void);
@@ -97,14 +101,7 @@ int main(void)
 }
 
 void configurerequest(XEvent *e) {
-	XConfigureRequestEvent *ev = &e->xconfigurerequest;
-	if (ws_layout[current_ws] == floating) {
-		XMoveResizeWindow(d, ev->window, 0, BAR_SIZE, ev->width, ev->height);
-	} else if (ws_layout[current_ws] == fullscreen) {
-		layout_fullscreen(ev->window);
-	} else if (ws_layout[current_ws] == tiling) {
-		layout_tiling();
-	}
+	apply_layout();
 }
 
 void buttonpress(XEvent *e) {
@@ -159,10 +156,7 @@ void maprequest(XEvent *e) {
 		XSetWindowBorder(d, ev->window, BORDER_INACTIVE_COLOR);
 	}
 	XMapWindow(d, ev->window);
-	if (ws_layout[current_ws] == fullscreen)
-		layout_fullscreen(ev->window);
-	else if (ws_layout[current_ws] == tiling)
-		layout_tiling();
+	apply_layout();
 	setfocus(ev->window);
 }
 
@@ -185,12 +179,29 @@ void unmapnotify(XEvent *e) {
 	apply_layout();
 }
 
-void layout_fullscreen(Window w) {
-	XMoveResizeWindow(d, w, 0, BAR_SIZE, DisplayWidth(d, 0), DisplayHeight(d, 0) - BAR_SIZE);
-	XSetWindowBorderWidth(d, w, 0);
+void layout_floating(void) {
+	for (int i = 0; i < ws_count[current_ws]; i++) { 
+		Window w = ws[current_ws][i];
+		XMoveResizeWindow(d, w, ws_geom[current_ws][i].x, ws_geom[current_ws][i].y, ws_geom[current_ws][i].w, ws_geom[current_ws][i].h);
+		XSetWindowBorderWidth(d, ws[current_ws][i], BORDER_SIZE);
+		ws_geom[current_ws][i].w = 0;
+	}
+
 }
 
-void layout_tiling() {		// master/stack
+void layout_fullscreen(void) {
+	for (int i = 0; i < ws_count[current_ws]; i++) { 
+		Window w = ws[current_ws][i];
+		if (ws_geom[current_ws][i].w == 0) {
+			XGetWindowAttributes(d, w, &attr);
+			ws_geom[current_ws][i] = (WinGeom){attr.x, attr.y, attr.width, attr.height};
+		}
+		XMoveResizeWindow(d, w, 0, 0, DisplayWidth(d, 0), DisplayHeight(d, 0));
+		XSetWindowBorderWidth(d, w, 0);
+	}
+}
+
+void layout_tiling(void) {		// master/stack
 	int n = ws_count[current_ws];
 	if (n == 0) return;
 
@@ -203,7 +214,8 @@ void layout_tiling() {		// master/stack
 		return;
 	}
 
-	int master_w = sw / 2; // maybe add coefficient to the config but it's kinda useless
+	if (tiling_master_size[current_ws] == 0) tiling_master_size[current_ws] = 0.5;
+	int master_w = sw * tiling_master_size[current_ws]; 
 	XMoveResizeWindow(d, ws[current_ws][0], 0, BAR_SIZE, master_w - BORDER_SIZE * 2, sh - BORDER_SIZE * 2);
 	XSetWindowBorderWidth(d, ws[current_ws][0], BORDER_SIZE);
 
@@ -216,22 +228,20 @@ void layout_tiling() {		// master/stack
 }
 
 void apply_layout(void) {
-	for (int i = 0; i < ws_count[current_ws]; i++) { // layouts that work with single windows
-		Window w = ws[current_ws][i];
-		if (ws_layout[current_ws] == fullscreen) {
-			if (ws_geom[current_ws][i].w == 0) {
-				XGetWindowAttributes(d, w, &attr);
-				ws_geom[current_ws][i] = (WinGeom){attr.x, attr.y, attr.width, attr.height};
-			}
-			layout_fullscreen(w);
-		} else if (ws_layout[current_ws] == floating) {
-			XMoveResizeWindow(d, w, ws_geom[current_ws][i].x, ws_geom[current_ws][i].y, ws_geom[current_ws][i].w, ws_geom[current_ws][i].h);
-			XSetWindowBorderWidth(d, ws[current_ws][i], BORDER_SIZE);
-			ws_geom[current_ws][i].w = 0;
-		}
+	switch(ws_layout[current_ws]) {
+		case tiling:
+			layout_tiling();
+			break;
+		case floating:
+			layout_floating();
+			break;
+		case fullscreen:
+			layout_fullscreen();
+			break;
+		default:
+			layout_tiling();
+			break;
 	}
-	if (ws_layout[current_ws] == tiling)
-        layout_tiling();
 	draw_bar();
 }
 
@@ -326,6 +336,7 @@ void switch_ws(Display *d, int new_ws) {
 	for (int i = 0; i < ws_count[current_ws]; i++)
 		XMapWindow(d, ws[current_ws][i]);
 	draw_bar();
+	apply_layout();
 }
 
 void move_to_ws(Display *d, Window win, int new_ws) {
@@ -339,7 +350,17 @@ void move_to_ws(Display *d, Window win, int new_ws) {
 		}
 	}
 	ws[new_ws][ws_count[new_ws]++] = win;
+	unmapping++;
 	XUnmapWindow(d, win);
-	if (ws_layout[current_ws] == tiling)
-		layout_tiling();
+	apply_layout();
+}
+
+void tiling_change_master_size(float size) {
+	if (tiling_master_size[current_ws] == 0) {
+		tiling_master_size[current_ws] = 0.5;
+	}
+	if ((tiling_master_size[current_ws]+size) < 1.0 && (tiling_master_size[current_ws]+size) > 0.1) {
+		tiling_master_size[current_ws]+=size;
+		apply_layout();
+	}
 }
